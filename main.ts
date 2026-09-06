@@ -57,8 +57,8 @@
  * - name: base
  *   type: string
  *   required: false
- *   default: 'HEAD'
- *   description: Git revision to diff against (HEAD = uncommitted work; any rev/range endpoint; empty = treat the whole tree as the build)
+ *   default: ''
+ *   description: 'Git revision to diff against. Leave empty for auto: the default branch when HEAD is a feature branch (so committed agent work is included), HEAD for uncommitted work, or pass a rev explicitly.'
  *   example: 'HEAD'
  * - name: run_checks
  *   type: string
@@ -67,7 +67,7 @@
  *   description: 'true executes the project''s OWN declared test/build/lint commands (max 4, 180s each) to prove command claims; false keeps the play read-only'
  *   example: 'true'
  * metadata:
- *   version: 0.1.0
+ *   version: 0.1.1
  *   rote_version: 0.79.0
  *   status: draft
  *   format: typescript
@@ -212,10 +212,13 @@ if (!valid) {
 
   report.push(`CLAIM VS BUILD  ${brief.root}`);
   report.push(`  evidence: ${ev.mode === "tree" ? "whole tree (non-git root)" : `git diff vs ${ev.base}`} · ${ev.changed_paths} changed path(s) · ${ev.added_lines} added line(s) · ${ev.tree_count} files in tree${ev.truncated ? " · TRUNCATED at caps" : ""}`);
+  if (ev.base_note) report.push(`  base: ${ev.base_note}`);
+  if (ev.empty_diff) report.push("  WARNING  the diff vs the base is empty: file claims were verified against the tree, but action claims have no diff to search. Pass base=<branch or rev> if the agent committed its work.");
   report.push(`  checkable claims: ${counts.claims} · ask items: ${counts.ask_items} · run_checks: ${brief.run_checks}`);
   report.push("");
   report.push(`VERDICT  ${verdict}`);
   report.push(`  ${brief.why}`);
+  if (brief.next) report.push(`  next: ${brief.next}`);
   report.push("");
 
   if (claims.length > 0) {

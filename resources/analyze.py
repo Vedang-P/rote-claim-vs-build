@@ -35,7 +35,7 @@ from pathlib import Path
 
 NAME_STOP = set("""the a an and or of for to in on with without into from by as is are was were be been this that these those it its all any some new more very
 i we you they he she them us our your their my me
-quickly important relevant properly correctly easily simple fast ready also just really much many lot lots nicely good better best""".split())
+quickly important relevant properly correctly easily simple fast ready also just really much many lot lots nicely good better best sure makes need using used within across want wants able""".split())
 
 TOKEN_STOP = set("""the a an and or of for to in on with without into from by as is are was were be been this that these those it its all any some new more very
 must should needs has have do does done make made build built use using used add added support supports implement implemented create created fix fixed update updated change changed remove removed
@@ -80,7 +80,7 @@ def stem(w):
     return w[:-1] if w.endswith("s") and len(w) > 4 else w
 
 
-def tokens(text, min_len=4):
+def tokens(text, min_len=3):
     out = []
     for w in re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{%d,}" % (min_len - 1), text):
         wl = w.lower().strip("_-")
@@ -102,8 +102,32 @@ def git(root, args, timeout=60):
         return 127, "", str(e)
 
 
+def resolve_base(root):
+    """Pick the diff base the way a reviewer thinks: what did the agent build
+    relative to the default branch? Falls back to HEAD (uncommitted work)
+    when the repo has no default branch or HEAD is it."""
+    rc, out, _ = git(root, ["symbolic-ref", "refs/remotes/origin/HEAD"],
+                     timeout=15)
+    default = None
+    if rc == 0 and out.strip():
+        default = out.strip().split("/")[-1]
+    if not default:
+        for cand in ("main", "master"):
+            rc2, out2, _ = git(root, ["rev-parse", "--verify", cand],
+                               timeout=15)
+            if rc2 == 0:
+                default = cand
+                break
+    rc, cur, _ = git(root, ["rev-parse", "--abbrev-ref", "HEAD"], timeout=15)
+    cur = cur.strip() if rc == 0 else ""
+    if default and cur and cur != default:
+        return default, ("diff vs default branch %s (HEAD is %s), so committed "
+                         "agent work is included" % (default, cur))
+    return "HEAD", "diff vs HEAD (uncommitted work on the default branch)"
+
+
 def evidence(root, base):
-    """Diff vs base (default HEAD). A non-git root falls back to tree mode:
+    """Diff vs base. A non-git root falls back to tree mode:
     every file IS the build (fresh project)."""
     ev = {"mode": "diff", "base": base, "changed": [], "added_lines": [],
           "tree_files": [], "git_ok": True, "truncated": False}
@@ -211,6 +235,15 @@ def declared_commands(root):
 # Claim + ask parsing
 # --------------------------------------------------------------------------
 
+TEST_DEF_PAT = re.compile(
+    r"^\s*(?:async\s+)?def\s+test_|^\s*(?:it|test)\s*\(|^\s*func\s+Test")
+
+
+def count_test_defs(added_lines):
+    return sum(1 for l in added_lines
+               if TEST_DEF_PAT.search(l) and not l.strip().startswith("#"))
+
+
 def parse_claims(text):
     claims = []
     for m in PATH_MENTION.finditer(text):
@@ -218,6 +251,11 @@ def parse_claims(text):
                        "path": m.group(0)})
     for m in ACTION_VERB.finditer(text):
         obj = m.group("object").strip()
+        # an object that runs into a command claim ("... and all tests pass")
+        # belongs to the command claim - cut it there
+        cm = COMMAND_CLAIM.search(obj)
+        if cm:
+            obj = obj[:cm.start()].strip()
         # the object may continue past a coordinating verb ("... and added
         # X") - cut at the next action verb so each verb gets its own claim
         obj = re.split(r"\s+and\s+(?:the\s+)?(?=added|created|implemented|built|wrote|fixed|updated|removed|deleted|refactored|extended)\b",
@@ -361,6 +399,7 @@ def check_command_claims(command_claims, results):
 def check_ask(items, ev, dpaths, readme_text):
     out = []
     added_blob = "\n".join(ev["added_lines"]).lower()
+    blob = ev.get("content_blob", "")
     for it in items:
         tk = it["tokens"]
         if not tk:
@@ -373,7 +412,8 @@ def check_ask(items, ev, dpaths, readme_text):
                     or any(f in fl.lower() for fl in ev["tree_files"]
                            for f in forms)
                     or (readme_text and any(f in readme_text.lower()
-                                            for f in forms))):
+                                            for f in forms))
+                    or (blob and any(f in blob for f in forms))):
                 hits += 1
         ratio = hits / len(tk)
         out.append({
@@ -420,8 +460,14 @@ def cmd_brief(args):
                           "why": "no claim supplied: pass claim_text or claim_file"}))
         return 2
 
-    ev = evidence(p, args.base)
+    if args.base:
+        base, base_note = args.base, ""
+    else:
+        base, base_note = resolve_base(p)
+    ev = evidence(p, base)
     dpaths = diff_paths(ev)
+    empty_diff = (ev["mode"] == "diff" and len(ev["added_lines"]) == 0
+                  and len(dpaths) == 0)
     readme_text = ""
     for cand in ("README.md", "readme.md", "README.rst", "README"):
         c = p / cand
@@ -446,14 +492,27 @@ def cmd_brief(args):
         elif c["kind"] == "command":
             continue  # handled jointly below
         elif c["kind"] == "count":
-            n_tests_tree = sum(1 for f in ev["tree_files"]
-                               if re.search(r"(test|spec)[\w.-]*\.(py|js|ts|tsx|go|rs)$",
-                                            f, re.I))
-            claim_results.append({
-                "kind": "count", "claim": c["text"], "verdict": "UNVERIFIABLE",
-                "why": "claimed %d %s; deterministic per-item counting is not "
-                       "in scope v1 (tree has %d test-shaped files)"
-                       % (c["n"], c["unit"], n_tests_tree)})
+            if "tests" in c["unit"] or "test cases" in c["unit"]:
+                observed = count_test_defs(ev["added_lines"])
+                if observed >= c["n"] > 0:
+                    claim_results.append({
+                        "kind": "count", "claim": c["text"], "verdict": "HELD",
+                        "why": "%d test definition(s) added in the diff "
+                               "(claimed %d)" % (observed, c["n"])})
+                else:
+                    claim_results.append({
+                        "kind": "count", "claim": c["text"],
+                        "verdict": "NO-EVIDENCE",
+                        "why": "claimed %d, observed %d test definition(s) "
+                               "added in the diff (static count; parametrized "
+                               "or renamed tests remain unknown)"
+                               % (c["n"], observed)})
+            else:
+                claim_results.append({
+                    "kind": "count", "claim": c["text"],
+                    "verdict": "UNVERIFIABLE",
+                    "why": "claimed %d %s; static counting for this unit is "
+                           "out of scope" % (c["n"], c["unit"])})
     command_claims = [c for c in claims if c["kind"] == "command"]
     cmds = declared_commands(p)
     cmd_results = run_commands(p, cmds) if (command_claims and args.run_checks) else []
@@ -491,10 +550,31 @@ def cmd_brief(args):
         verdict = "CLAIMS UNPROVABLE"
         why = "no claim found hard evidence in this build"
 
+    if verdict == "CLAIMS CONTRADICTED":
+        nxt = ("fix the contradicted items above, or correct the summary "
+               "before shipping it")
+    elif verdict == "ASK GAPS":
+        nxt = ("ask items above have no build evidence: implement them, or "
+               "say plainly they were skipped")
+    elif verdict == "SHIPPED, WITH UNPROVEN CLAIMS":
+        nxt = ("add the missing evidence (declared test/build commands, or a "
+               "diff that contains the work), or soften the claim wording")
+    elif verdict == "CLAIMS UNPROVABLE" and empty_diff:
+        nxt = ("diff vs %s is empty; pass base=<branch or rev> if the agent "
+               "committed its work, or make the changes the claims describe"
+               % base)
+    elif verdict == "CLAIMS UNPROVABLE":
+        nxt = ("declare test/build commands in package.json or a Makefile so "
+               "command claims can be proven")
+    else:
+        nxt = "nothing to fix; the build matches the claims within this play's evidence boundary"
+
     print(json.dumps({
         "ok": True,
         "root": str(p.resolve()),
         "evidence": {"mode": ev["mode"], "base": ev["base"],
+                     "base_note": base_note,
+                     "empty_diff": empty_diff,
                      "git_ok": ev["git_ok"], "tree_count": ev["tree_count"],
                      "changed_paths": len(dpaths),
                      "added_lines": len(ev["added_lines"]),
@@ -506,7 +586,7 @@ def cmd_brief(args):
                    "ask_evidenced": sum(1 for a in ask_results
                                         if a["verdict"] == "EVIDENCED"),
                    "must_gaps": len(must_gaps)},
-        "verdict": verdict, "why": why,
+        "verdict": verdict, "why": why, "next": nxt,
         "claims": claim_results,
         "ask": ask_results[:40],
         "commands_run": cmd_results,

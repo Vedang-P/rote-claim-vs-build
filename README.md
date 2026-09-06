@@ -36,6 +36,10 @@ rote play run vedang/claim-vs-build root=/absolute/path/to/project \
 - vs `sakshamsai26/claim-vs-reality-auditor`: that play explicitly never runs tests ("a changed test file is not proof tests pass") and takes no ask input — "all tests pass" stays UNPROVEN there and asked-but-not-built is invisible. Here command claims are provable and the ask closes the triangle.
 - vs `psohi-labs/polygraph`: that checks agent claims against external APIs (OSV/World Bank/USGS). This checks build claims against the local repo and diff.
 
+## v0.1.1 — the committed-work fix
+
+Agents commit their work. The old default (diff vs HEAD) went blind the moment they did: committed files showed an empty diff and honest-but-useless evidence. Now the diff base auto-resolves to the default branch when HEAD is a feature branch, so committed agent work is verified for real. Plus: ask coverage searches file contents (a "login" ask is evidenced by src/auth.ts's content, not its filename), count claims report observed test definitions added in the diff, and every verdict ships a concrete next action.
+
 ## Tested on real agent sessions
 
 - **paper-brief** (this hackathon): ask = the author's original request, claim = the shipped description, evidence = whole tree → `SHIPPED, WITH UNPROVEN CLAIMS` (no declared checks existed to prove "all checks pass" — honest), ask coverage 86% EVIDENCED
