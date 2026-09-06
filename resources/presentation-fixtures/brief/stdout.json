@@ -1,0 +1,64 @@
+{
+  "ok": true,
+  "root": "/private/tmp/cvb-demo",
+  "evidence": {
+    "mode": "diff",
+    "base": "empty",
+    "git_ok": true,
+    "tree_count": 2,
+    "changed_paths": 2,
+    "added_lines": 2,
+    "truncated": false
+  },
+  "counts": {
+    "claims": 3,
+    "held": 0,
+    "contradicted": 2,
+    "no_evidence": 1,
+    "unverifiable": 0,
+    "ask_items": 1,
+    "ask_evidenced": 0,
+    "must_gaps": 0
+  },
+  "verdict": "CLAIMS CONTRADICTED",
+  "why": "2 of 3 claims contradicted by the build",
+  "claims": [
+    {
+      "kind": "file",
+      "claim": "src/auth.ts",
+      "verdict": "CONTRADICTED",
+      "why": "no such file in the tree"
+    },
+    {
+      "kind": "action",
+      "claim": "app and all tests pass",
+      "verdict": "NO-EVIDENCE",
+      "why": "no diff or tree evidence for tokens: pass"
+    },
+    {
+      "claim": "all tests pass",
+      "verdict": "CONTRADICTED",
+      "why": "`npm run test` exited 1"
+    }
+  ],
+  "ask": [
+    {
+      "sentence": "build the app and make sure all tests pass",
+      "must": false,
+      "evidence_ratio": 0.0,
+      "verdict": "NOT-EVIDENT"
+    }
+  ],
+  "commands_run": [
+    {
+      "name": "npm run test",
+      "kind": "test",
+      "exit": 1,
+      "output_tail": "3 tests failed\n"
+    }
+  ],
+  "declared_commands": [
+    "npm run test"
+  ],
+  "run_checks": "true"
+}

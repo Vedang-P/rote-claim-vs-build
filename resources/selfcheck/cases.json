@@ -1,0 +1,172 @@
+{
+  "description": "Bundled self-check for claim-vs-build: claim/ask parsing cases use real request-and-claim shapes from actual agent sessions; command-map cases run against real manifest shapes on disk; verdict cases pin the algebra. No case invents a claim the play cannot check.",
+  "claim_cases": [
+    {
+      "name": "file-and-command-claims",
+      "text": "I created paper-brief/main.ts and resources/analyze.py. All tests pass and the build succeeds.",
+      "expect_kinds": [
+        "command",
+        "command",
+        "file",
+        "file"
+      ],
+      "expect_contains": [
+        {
+          "kind": "file",
+          "text": "paper-brief/main.ts"
+        },
+        {
+          "kind": "command",
+          "text": "tests pass"
+        }
+      ]
+    },
+    {
+      "name": "action-claim-implemented",
+      "text": "Implemented the metric extractor with dataset attribution and added baseline delta rejection to the results probe.",
+      "expect_kinds": [
+        "action",
+        "action"
+      ],
+      "expect_contains": [
+        {
+          "kind": "action",
+          "text": "metric extractor"
+        }
+      ]
+    },
+    {
+      "name": "count-claim",
+      "text": "Added 12 tests covering the verdict algebra and 3 endpoints.",
+      "expect_kinds": [
+        "count",
+        "count"
+      ]
+    },
+    {
+      "name": "removed-verb-captured",
+      "text": "Removed the old config loader and deleted config.py.",
+      "expect_kinds": [
+        "action",
+        "file"
+      ]
+    }
+  ],
+  "ask_cases": [
+    {
+      "name": "real-hackathon-ask",
+      "text": "summarize a research paper with important details and extract the relevant results and benchmarks quickly",
+      "expect_items": 1,
+      "expect_must": 0
+    },
+    {
+      "name": "must-items-recognized",
+      "text": "Build a CLI that must read PDFs and should never touch the network. It needs to report metrics.",
+      "expect_items": 2,
+      "expect_must": 2
+    }
+  ],
+  "command_map_cases": [
+    {
+      "name": "npm-scripts-mapped",
+      "manifests": {
+        "package.json": "{\"scripts\": {\"test\": \"vitest\", \"build\": \"tsc\", \"lint\": \"eslint .\"}}"
+      },
+      "expect": [
+        "npm run test",
+        "npm run build",
+        "npm run lint"
+      ]
+    },
+    {
+      "name": "makefile-targets-mapped",
+      "manifests": {
+        "Makefile": "test:\n\tpytest\n\ncheck:\n\techo ok\n"
+      },
+      "expect": [
+        "make test",
+        "make check"
+      ]
+    },
+    {
+      "name": "pytest-dir-mapped",
+      "manifests": {
+        "pyproject.toml": "[tool.pytest.ini_options]\naddopts = '-q'\n",
+        "tests/test_x.py": "def test_x():\n    assert True\n"
+      },
+      "expect": [
+        "python3 -m pytest -q"
+      ]
+    },
+    {
+      "name": "no-manifest-no-invention",
+      "manifests": {
+        "README.md": "just docs"
+      },
+      "expect": []
+    }
+  ],
+  "verdict_cases": [
+    {
+      "name": "all-held-clean",
+      "counts": {
+        "held": 3,
+        "contradicted": 0,
+        "no_evidence": 0,
+        "must_gaps": 0
+      },
+      "expect": "SHIPPED AS CLAIMED"
+    },
+    {
+      "name": "one-contradicted-dominates",
+      "counts": {
+        "held": 4,
+        "contradicted": 1,
+        "no_evidence": 0,
+        "must_gaps": 0
+      },
+      "expect": "CLAIMS CONTRADICTED"
+    },
+    {
+      "name": "held-but-must-gap",
+      "counts": {
+        "held": 2,
+        "contradicted": 0,
+        "no_evidence": 0,
+        "must_gaps": 1
+      },
+      "expect": "ASK GAPS"
+    },
+    {
+      "name": "held-with-soft-gaps",
+      "counts": {
+        "held": 2,
+        "contradicted": 0,
+        "no_evidence": 1,
+        "must_gaps": 0
+      },
+      "expect": "SHIPPED, WITH UNPROVEN CLAIMS"
+    },
+    {
+      "name": "nothing-provable",
+      "counts": {
+        "held": 0,
+        "contradicted": 0,
+        "no_evidence": 2,
+        "must_gaps": 0
+      },
+      "expect": "CLAIMS UNPROVABLE"
+    },
+    {
+      "name": "unverifiable-blocks-clean",
+      "counts": {
+        "held": 2,
+        "contradicted": 0,
+        "no_evidence": 0,
+        "unverifiable": 1,
+        "must_gaps": 0
+      },
+      "expect": "SHIPPED, WITH UNPROVEN CLAIMS"
+    }
+  ]
+}

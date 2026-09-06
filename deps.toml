@@ -1,0 +1,28 @@
+schema_version = 1
+
+[[tools]]
+id = "python3"
+command = "python3"
+required = true
+version_requirement = ">=3.8.0"
+
+[[tools.install]]
+manager = "brew"
+package = "python@3.12"
+
+[[tools.install]]
+manager = "apt"
+package = "python3"
+
+[[tools]]
+id = "git"
+command = "git"
+required = true
+
+[[tools.install]]
+manager = "brew"
+package = "git"
+
+[[tools.install]]
+manager = "apt"
+package = "git"
